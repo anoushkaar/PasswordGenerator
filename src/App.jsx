@@ -1,5 +1,5 @@
 import { Check, Copy, RefreshCw, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CopyToClipboard } from "react-copy-to-clipboard";
 import toast, { Toaster } from "react-hot-toast";
 import "./App.css";
@@ -9,15 +9,85 @@ function App() {
   const [isCapsTrue, setIsCapsTrue] = useState(true);
   const [isNumbersTrue, setIsNumbersTrue] = useState(true);
   const [isSymbolsTrue, setIsSymbolsTrue] = useState(false);
-  const smallAlphabets = "abcdefghijklmnopqrstuvwxyz";
-  const capitalAlphabets = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const numbers = "0123456789";
+  const [excludeAmbiguous, setExcludeAmbiguous] = useState(false);
+
+  const ambiguousChars = "0O1lI";
+  const smallAlphabets = excludeAmbiguous
+    ? "abcdefghijkmnopqrstuvwxyz"
+    : "abcdefghijklmnopqrstuvwxyz";
+  const capitalAlphabets = excludeAmbiguous
+    ? "ABCDEFGHJKLMNPQRSTUVWXYZ"
+    : "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const numbers = excludeAmbiguous ? "23456789" : "0123456789";
   const symbols = "!@#$%^&*()_+[]{}|;:,.<>?";
 
   const [password, setPassword] = useState("");
   const [rangeValue, setRangeValue] = useState(12);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showPassword, setShowPassword] = useState(true);
+  const [passwordHistory, setPasswordHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Calculate password strength
+  const calculateStrength = useCallback((pass) => {
+    if (!pass) return { score: 0, label: "None", color: "bg-slate-500" };
+
+    let score = 0;
+    const length = pass.length;
+
+    // Length scoring
+    if (length >= 8) score += 1;
+    if (length >= 12) score += 1;
+    if (length >= 16) score += 1;
+    if (length >= 20) score += 1;
+
+    // Character variety scoring
+    if (/[a-z]/.test(pass)) score += 1;
+    if (/[A-Z]/.test(pass)) score += 1;
+    if (/[0-9]/.test(pass)) score += 1;
+    if (/[^a-zA-Z0-9]/.test(pass)) score += 2;
+
+    // Determine strength level
+    if (score <= 2) return { score: 1, label: "Weak", color: "bg-red-500" };
+    if (score <= 4) return { score: 2, label: "Fair", color: "bg-orange-500" };
+    if (score <= 6)
+      return { score: 3, label: "Strong", color: "bg-yellow-500" };
+    return { score: 4, label: "Very Strong", color: "bg-emerald-500" };
+  }, []);
+
+  // Calculate entropy
+  const calculateEntropy = useCallback((pass, charsetSize) => {
+    if (!pass || charsetSize === 0) return 0;
+    return Math.floor(pass.length * Math.log2(charsetSize));
+  }, []);
+
+  const strength = useMemo(
+    () => calculateStrength(password),
+    [password, calculateStrength]
+  );
+
+  const charsetSize = useMemo(() => {
+    let size = 0;
+    if (isSmallTrue) size += smallAlphabets.length;
+    if (isCapsTrue) size += capitalAlphabets.length;
+    if (isNumbersTrue) size += numbers.length;
+    if (isSymbolsTrue) size += symbols.length;
+    return size;
+  }, [
+    isSmallTrue,
+    isCapsTrue,
+    isNumbersTrue,
+    isSymbolsTrue,
+    smallAlphabets,
+    capitalAlphabets,
+    numbers,
+  ]);
+
+  const entropy = useMemo(
+    () => calculateEntropy(password, charsetSize),
+    [password, charsetSize, calculateEntropy]
+  );
 
   function passwordGenerator() {
     setIsGenerating(true);
